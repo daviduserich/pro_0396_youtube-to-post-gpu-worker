@@ -311,7 +311,20 @@ def transcribe_aligned(audio_path, timeline_segment, chunk_index):
         ts_end = format_timestamp(last_word_end + GLOBAL_OFFSET)
         final_transcript.append(f"**[{current_speaker} | {ts_start} - {ts_end}]:**\n{text_block}")
     
-    return {"generated_text": "\n\n".join(final_transcript) if final_transcript else "[... Stille ...]"}
+    formatted_words = []
+    for w in words:
+        ts = w.get("timestamp")
+        if ts and ts[0] is not None and ts[1] is not None:
+            formatted_words.append({
+                "word": w.get("text", "").strip(),
+                "start": round(ts[0] + GLOBAL_OFFSET, 3),
+                "end": round(ts[1] + GLOBAL_OFFSET, 3)
+            })
+
+    return {
+        "generated_text": "\n\n".join(final_transcript) if final_transcript else "[... Stille ...]",
+        "words": formatted_words
+    }
 
 def run_global_diarization(audio_path, num_speakers=None):
     pass 
