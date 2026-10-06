@@ -1,0 +1,77 @@
+name: Manual Build NextGen Image
+
+# NUR manueller Start (kein Auto-Build bei Push)
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Zusätzlicher Tag (z.B. v1.0, test-fix)'
+        required: false
+        default: 'latest'
+
+env:
+  REGISTRY: ghcr.io
+  # Der Image-Name wird automatisch aus dem Repo-Namen abgeleitet
+  # WICHTIG: Stelle sicher, dass du in den Repo-Settings unter "Actions" -> "General"
+  # die "Workflow permissions" auf "Read and write permissions" gesetzt hast!
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Zeitstempel für eindeutige Versionierung (z.B. 2025-01-15-1430)
+      - name: Get current date
+        id: date
+        run: echo "DATE=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_ENV
+
+      # Platz schaffen (Whisper Images sind riesig)
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+
+      - name: Lowercase Repository Name
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Der eigentliche Build-Prozess
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          # Wir setzen 3 Tags:
+          # 1. Den manuellen Input (default: latest)
+          # 2. Das Datum (für Historie)
+          # 3. Den fixen Tag 'nextgen' (damit man immer weiss, welches das neue System ist)
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.DATE }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nextgen
+          # Caching beschleunigt wiederholte Builds massiv
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
